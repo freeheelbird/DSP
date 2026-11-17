@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Polyphase Resampler Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a bench instrument. Sticky control column on the left, three stacked work panels on the right. */
+:root{
+  --bg:#edf0f3; --panel:#fbfcfd; --ink:#10151b; --muted:#56606b; --line:#d6dce2; --well:#f1f4f7;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --accent:#2a78d6; --accent-ink:#ffffff; --warn-bg:#fdf1dc; --warn-ink:#6b4a00;
+  --display:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){color-scheme:dark;
+    --bg:#101316; --panel:#191c20; --ink:#eceef0; --muted:#a7afb8; --line:#2f353c; --well:#20242a;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --accent:#3987e5; --accent-ink:#ffffff; --warn-bg:#3a2e12; --warn-ink:#f1d48a;}
+}
+:root[data-theme="dark"]{color-scheme:dark;
+  --bg:#101316; --panel:#191c20; --ink:#eceef0; --muted:#a7afb8; --line:#2f353c; --well:#20242a;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --accent:#3987e5; --accent-ink:#ffffff; --warn-bg:#3a2e12; --warn-ink:#f1d48a;}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--body);}
+.app{display:grid;grid-template-columns:300px minmax(0,1fr);gap:16px;padding:16px;max-width:1500px;margin:0 auto;align-items:start}
+header.top{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:baseline;gap:8px 20px}
+h1{font:600 20px/1.2 var(--display);margin:0;letter-spacing:-.01em}
+.chain{font:500 13px var(--mono);color:var(--muted)}
+.chain b{color:var(--ink);font-weight:500}
+aside{position:sticky;top:12px;display:flex;flex-direction:column;gap:12px;max-height:calc(100vh - 24px);overflow:auto}
+main{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px}
+.card h2{font:600 12px var(--display);text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:0 0 10px}
+section.card h2{font-size:13px}
+.sub{color:var(--muted);font-size:13px;margin:-4px 0 12px;max-width:75ch}
+.field{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.field:last-child{margin-bottom:0}
+.field label,.lab{display:flex;justify-content:space-between;gap:8px;font-size:13px}
+.field output,.val{font:500 12px var(--mono);font-variant-numeric:tabular-nums;color:var(--muted);white-space:nowrap}
+input[type=range]{width:100%;accent-color:var(--accent);margin:0}
+select,input[type=number]{font:500 13px var(--mono);color:var(--ink);background:var(--well);border:1px solid var(--line);border-radius:6px;padding:5px 8px;width:100%}
+button{font:500 13px var(--body);color:var(--ink);background:var(--well);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.rates{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stepper{display:grid;grid-template-columns:30px 1fr 30px;gap:4px}
+.stepper button{padding:5px 0}
+.stepper input{text-align:center;-moz-appearance:textfield}
+.ratio{margin-top:10px;font:500 13px var(--mono);font-variant-numeric:tabular-nums}
+.ratio small{display:block;color:var(--muted);font:400 12px var(--body);margin-top:2px}
+.seg{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--well)}
+.seg button{flex:1;border:0;border-radius:0;background:transparent;padding:6px 6px;font-size:12.5px;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button[aria-pressed=true]{background:var(--accent);color:var(--accent-ink)}
+.check{display:flex;gap:8px;align-items:center;font-size:13px;margin-bottom:10px}
+.note{background:var(--warn-bg);color:var(--warn-ink);border-radius:6px;padding:8px 10px;font-size:12.5px;margin-top:10px}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.stat{background:var(--well);border-radius:6px;padding:6px 10px;min-width:104px}
+.stat span{display:block;font-size:11.5px;color:var(--muted)}
+.stat b{font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px}
+.ptitle{font-size:13px;font-weight:500;margin:0 0 2px;display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 14px}
+.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--muted);font-weight:400}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+.plot{position:relative;width:100%}
+.plot canvas{display:block;width:100%}
+.tip{position:absolute;top:8px;pointer-events:none;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px;font:12px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;display:none;z-index:2;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.tip i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+.bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;margin-bottom:10px}
+.bar .seg{flex:0 1 auto}
+.bar .grow{flex:1}
+.status{font:13px/1.6 var(--mono);background:var(--well);border-radius:6px;padding:8px 10px;margin-bottom:10px;font-variant-numeric:tabular-nums}
+.status em{font-style:normal;color:var(--accent);font-weight:500}
+.sched{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;font:12px var(--mono)}
+.sched span{border:1px solid var(--line);border-radius:5px;padding:2px 6px;color:var(--muted)}
+.sched span.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.scroll{overflow:auto;border:1px solid var(--line);border-radius:6px;background:var(--panel);max-height:640px;margin-bottom:14px}
+svg text{font-family:var(--mono);font-size:11px;fill:var(--ink)}
+svg .mut{fill:var(--muted)}
+svg .wire{stroke:var(--muted);stroke-width:1.2;fill:none}
+svg .reg{fill:var(--well);stroke:var(--muted);stroke-width:1}
+svg .reg.new{stroke:var(--s2);stroke-width:2}
+svg .act .reg{fill:color-mix(in srgb,var(--accent) 16%,var(--panel));stroke:var(--accent)}
+svg .act .reg.new{stroke:var(--s2)}
+svg .dim{opacity:.38}
+svg .zero{opacity:.35}
+svg .arm{stroke:var(--accent);stroke-width:2.5;stroke-linecap:round}
+svg .node{fill:var(--panel);stroke:var(--muted);stroke-width:1.2}
+svg .dot{fill:var(--muted)}
+svg .lbl{font-size:12px;font-weight:500}
+svg .acc{fill:var(--accent)}
+.keyrow{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin:-6px 0 12px}
+.keyrow i{display:inline-block;width:16px;height:11px;border-radius:2px;vertical-align:-1px;margin-right:5px;border:1.5px solid var(--muted);background:var(--well)}
+.keyrow i.k-act{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 16%,var(--panel))}
+.keyrow i.k-new{border-color:var(--s2);border-width:2px}
+details{margin-top:12px;font-size:13px}
+details summary{cursor:pointer;color:var(--muted)}
+pre{font:12px/1.5 var(--mono);background:var(--well);border-radius:6px;padding:10px;max-height:220px;overflow:auto;margin:8px 0 0}
+.stage{margin-bottom:10px}
+.stage:last-child{margin-bottom:0}
+@media (max-width:900px){.app{grid-template-columns:1fr}aside{position:static;max-height:none}}
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>Polyphase Resampler Lab</h1>
+    <div class="chain" id="chain"></div>
+  </header>
+
+  <aside>
+    <div class="card">
+      <h2>Rate change</h2>
+      <div class="rates">
+        <div class="field"><label for="inL">Interpolate L</label>
+          <div class="stepper"><button type="button" data-step="inL" data-d="-1" aria-label="Decrease L">−</button><input id="inL" type="number" min="1" max="32" value="3"><button type="button" data-step="inL" data-d="1" aria-label="Increase L">+</button></div></div>
+        <div class="field"><label for="inM">Decimate M</label>
+          <div class="stepper"><button type="button" data-step="inM" data-d="-1" aria-label="Decrease M">−</button><input id="inM" type="number" min="1" max="32" value="2"><button type="button" data-step="inM" data-d="1" aria-label="Increase M">+</button></div></div>
+      </div>
+      <div class="ratio" id="ratio"></div>
+    </div>
+
+    <div class="card">
+      <h2>Prototype filter</h2>
+      <div class="field"><span class="lab">Design</span>
+        <div class="seg" id="segMethod">
+          <button type="button" data-v="remez" aria-pressed="true">Equiripple</button>
+          <button type="button" data-v="ls" aria-pressed="false">Least-squares</button>
+          <button type="button" data-v="hb" aria-pressed="false">Half-band</button>
+        </div></div>
+      <div class="field" id="hbField" hidden><label for="hbOpt">Half-band optimised by</label>
+        <select id="hbOpt"><option value="remez">Equiripple (minimax)</option><option value="ls">Least-squares</option></select></div>
+      <div class="field"><label for="inN">Taps N <output id="oN"></output></label>
+        <input id="inN" type="range" min="3" max="513" value="48"></div>
+      <label class="check" for="scaleN"><input id="scaleN" type="checkbox" checked> Scale N when L or M changes</label>
+      <div class="field"><label for="inAp">Passband edge <output id="oAp"></output></label>
+        <input id="inAp" type="range" min="0.2" max="0.98" step="0.01" value="0.8"></div>
+      <div class="field"><label for="inAs">Stopband edge <output id="oAs"></output></label>
+        <input id="inAs" type="range" min="0.5" max="2" step="0.01" value="1.2"></div>
+      <div class="field"><label for="inWt">Stopband weight <output id="oWt"></output></label>
+        <input id="inWt" type="range" min="-2" max="3" step="0.05" value="0"></div>
+      <div class="note" id="filtNote" hidden></div>
+    </div>
+
+    <div class="card">
+      <h2>Test signal</h2>
+      <div class="field"><label for="sigType">Input spectrum</label>
+        <select id="sigType">
+          <option value="band">Sloped band (0 to −30 dB)</option>
+          <option value="tones">Four tones</option>
+          <option value="noise">Flat noise, full band</option>
+          <option value="interferer">Sloped band + tone near Nyquist</option>
+        </select></div>
+      <div class="field"><label for="inBw">Bandwidth <output id="oBw"></output></label>
+        <input id="inBw" type="range" min="0.1" max="1" step="0.01" value="0.75"></div>
+      <div class="field"><label for="dbFloor">Plot floor</label>
+        <select id="dbFloor"><option value="-80">−80 dB</option><option value="-120" selected>−120 dB</option><option value="-160">−160 dB</option></select></div>
+    </div>
+  </aside>
+
+  <main>
+    <section class="card">
+      <h2>Prototype filter</h2>
+      <div class="stats" id="stats"></div>
+      <div class="two">
+        <div>
+          <p class="ptitle">Magnitude response <span class="legend"><span><i style="background:var(--s1)"></i>|H(f)|, DC gain normalised</span></span></p>
+          <div id="pMag"></div>
+        </div>
+        <div>
+          <p class="ptitle">Impulse response <span class="legend"><span><i style="background:var(--s1)"></i><span id="impKey"></span></span><span><i style="background:var(--muted)"></i>other taps</span></span></p>
+          <div id="pImp"></div>
+        </div>
+      </div>
+      <details><summary>Coefficients</summary>
+        <div class="bar" style="margin:8px 0 0"><button type="button" id="copyBtn">Copy coefficients</button><span class="val" id="copyMsg">Unity DC gain. Multiply by L for the interpolator.</span></div>
+        <pre id="coefs"></pre></details>
+    </section>
+
+    <section class="card">
+      <h2>Polyphase structure</h2>
+      <div class="bar">
+        <div class="seg" id="segForm">
+          <button type="button" data-v="L" aria-pressed="true">L legs, output commutator</button>
+          <button type="button" data-v="M" aria-pressed="false">M legs, input commutator</button>
+        </div>
+        <span class="grow"></span>
+        <button type="button" id="btnPrev" aria-label="Previous output sample">◀ y[m−1]</button>
+        <button type="button" id="btnNext" aria-label="Next output sample">y[m+1] ▶</button>
+        <button type="button" id="btnPlay">Play</button>
+      </div>
+      <div class="status" id="status"></div>
+      <div class="sched" id="sched"></div>
+      <div class="keyrow"><span><i></i>storage unit, labelled with the sample it holds</span><span><i class="k-act"></i>leg used for this output</span><span><i class="k-new"></i>shifted in since the previous output</span></div>
+      <div class="scroll" id="diagWrap"><svg id="diag" role="img" aria-label="Polyphase filter structure"></svg></div>
+      <div class="two">
+        <div>
+          <p class="ptitle">Leg magnitude <span class="legend"><span><i style="background:var(--s1)"></i><span class="legKey"></span></span><span><i style="background:var(--muted)"></i>other legs</span></span></p>
+          <div id="pLegMag"></div>
+        </div>
+        <div>
+          <p class="ptitle">Leg group delay <span class="legend"><span><i style="background:var(--s1)"></i><span class="legKey"></span></span><span><i style="background:var(--muted)"></i>other legs</span></span></p>
+          <div id="pLegGd"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Spectra through the resampler</h2>
+      <p class="sub">Exact steady-state spectra of a periodic test signal. Frequency is in units of the input sample rate at every stage, so features line up from plot to plot. Levels are relative to the strongest input component.</p>
+      <div class="stage"><p class="ptitle"><span id="t1"></span><span class="legend"><span><i style="background:var(--s1)"></i>input</span></span></p><div id="pIn"></div></div>
+      <div class="stage"><p class="ptitle"><span id="t2"></span><span class="legend"><span><i style="background:var(--s1)"></i>baseband</span><span><i style="background:var(--s2)"></i>images</span><span><i style="background:var(--s3)"></i>filter |H|</span></span></p><div id="pUp"></div></div>
+      <div class="stage"><p class="ptitle"><span id="t3"></span><span class="legend"><span><i style="background:var(--s1)"></i>baseband</span><span><i style="background:var(--s2)"></i>residual images</span></span></p><div id="pFilt"></div></div>
+      <div class="stage"><p class="ptitle"><span id="t4"></span><span class="legend"><span><i style="background:var(--s1)"></i>output</span><span><i style="background:var(--s2)"></i>image and alias content only</span></span></p><div id="pOut"></div></div>
+    </section>
+  </main>
+</div>
+
+<script>
+/* ===== DSP core: no DOM. H(w) = c0 + sum_k a_k cos(nu_k w) on a set of bands ===== */
+const DSP = (() => {
+  function solve(A, b) {            // Gaussian elimination, partial pivoting. A: array of Float64Array rows
+    const n = b.length;
+    for (let c = 0; c < n; c++) {
+      let p = c, best = Math.abs(A[c][c]);
+      for (let r = c + 1; r < n; r++) { const v = Math.abs(A[r][c]); if (v > best) { best = v; p = r; } }
+      if (best === 0) return null;
+      if (p !== c) { const t = A[p]; A[p] = A[c]; A[c] = t; const tb = b[p]; b[p] = b[c]; b[c] = tb; }
+      const Ac = A[c], piv = Ac[c];
+      for (let r = c + 1; r < n; r++) {
+        const Ar = A[r], f = Ar[c] / piv;
+        if (f === 0) continue;
+        for (let k = c; k < n; k++) Ar[k] -= f * Ac[k];
+        b[r] -= f * b[c];
+      }
+    }
+    const x = new Float64Array(n);
+    for (let r = n - 1; r >= 0; r--) {
+      let s = b[r]; const Ar = A[r];
+      for (let k = r + 1; k < n; k++) s -= Ar[k] * x[k];
+      x[r] = s / Ar[r];
+    }
+    return x;
+  }
+
+  // bands: [{w1,w2,D,W}] in rad/sample. Returns coefficients a_k.
+  function lsFit(nu, bands) {
+    const n = nu.length;
+    const I = (al, w1, w2) => Math.abs(al) < 1e-12 ? (w2 - w1) : (Math.sin(al * w2) - Math.sin(al * w1)) / al;
+    const Q = [], b = new Float64Array(n);
+    for (let i = 0; i < n; i++) Q.push(new Float64Array(n));
+    for (const bd of bands) {
+      for (let i = 0; i < n; i++) {
+        b[i] += bd.W * bd.D * I(nu[i], bd.w1, bd.w2);
+        for (let j = i; j < n; j++) {
+          const v = 0.5 * bd.W * (I(nu[i] - nu[j], bd.w1, bd.w2) + I(nu[i] + nu[j], bd.w1, bd.w2));
+          Q[i][j] += v; if (j !== i) Q[j][i] += v;
+        }
+      }
+    }
+    let tr = 0; for (let i = 0; i < n; i++) tr += Q[i][i];
+    const ridge = 1e-14 * tr / n;
+    for (let i = 0; i < n; i++) Q[i][i] += ridge;
+    return { a: solve(Q, b), iters: 1, converged: true };
+  }
+
+  // Remez exchange on a dense grid, solving the interpolation system directly.
+  function remezFit(nu, bands, excludePi) {
+    const n = nu.length, r = n + 1;
+    const total = bands.reduce((s, b) => s + (b.w2 - b.w1), 0);
+    const G = Math.max(16 * n, 400);
+    const w = [], D = [], W = [], bandOf = [];
+    bands.forEach((bd, bi) => {
+      const m = Math.max(8, Math.round(G * (bd.w2 - bd.w1) / total));
+      for (let i = 0; i <= m; i++) {
+        const wi = bd.w1 + (bd.w2 - bd.w1) * i / m;
+        if (excludePi && wi > Math.PI - 1e-9) continue;
+        w.push(wi); D.push(bd.D); W.push(bd.W); bandOf.push(bi);
+      }
+    });
+    const g = w.length;
+    if (g < r + 2) return { a: null };
+    const B = new Float64Array(g * n);
+    for (let i = 0; i < g; i++) for (let k = 0; k < n; k++) B[i * n + k] = Math.cos(nu[k] * w[i]);
+    let ext = new Int32Array(r);
+    for (let i = 0; i < r; i++) ext[i] = Math.round(i * (g - 1) / (r - 1));
+    const E = new Float64Array(g);
+    let a = null, delta = 0, converged = false, it = 0, best = null;
+    for (it = 1; it <= 60; it++) {
+      const A = [], rhs = new Float64Array(r);
+      for (let i = 0; i < r; i++) {
+        const row = new Float64Array(r), gi = ext[i];
+        for (let k = 0; k < n; k++) row[k] = B[gi * n + k];
+        row[n] = ((i & 1) ? -1 : 1) / W[gi];
+        A.push(row); rhs[i] = D[gi];
+      }
+      const sol = solve(A, rhs);
+      if (!sol) break;
+      a = sol.subarray(0, n); delta = Math.abs(sol[n]);
+      let emax = 0;
+      for (let i = 0; i < g; i++) {
+        let s = 0; const o = i * n;
+        for (let k = 0; k < n; k++) s += a[k] * B[o + k];
+        E[i] = W[i] * (D[i] - s);
+        const ae = Math.abs(E[i]); if (ae > emax) emax = ae;
+      }
+      if (!best || emax < best.emax) best = { a: Float64Array.from(a), emax };
+      if (emax - delta <= 1e-5 * emax + 1e-15) { converged = true; break; }
+      // candidate extrema
+      let cand = [];
+      for (let i = 0; i < g; i++) {
+        const e = E[i]; if (e === 0) continue;
+        const hasL = i > 0 && bandOf[i - 1] === bandOf[i], hasR = i < g - 1 && bandOf[i + 1] === bandOf[i];
+        const l = hasL ? E[i - 1] : null, rr = hasR ? E[i + 1] : null;
+        const ok = e > 0 ? ((l === null || e >= l) && (rr === null || e > rr))
+                         : ((l === null || e <= l) && (rr === null || e < rr));
+        if (ok) cand.push(i);
+      }
+      // enforce alternation
+      const alt = [];
+      for (const i of cand) {
+        if (alt.length && (E[alt[alt.length - 1]] > 0) === (E[i] > 0)) {
+          if (Math.abs(E[i]) > Math.abs(E[alt[alt.length - 1]])) alt[alt.length - 1] = i;
+        } else alt.push(i);
+      }
+      while (alt.length > r) {
+        if (alt.length - r === 1) {
+          if (Math.abs(E[alt[0]]) < Math.abs(E[alt[alt.length - 1]])) alt.shift(); else alt.pop();
+        } else {
+          let mi = 0;
+          for (let i = 1; i < alt.length; i++) if (Math.abs(E[alt[i]]) < Math.abs(E[alt[mi]])) mi = i;
+          if (mi === 0) alt.shift();
+          else if (mi === alt.length - 1) alt.pop();
+          else {
+            const nb = Math.abs(E[alt[mi - 1]]) < Math.abs(E[alt[mi + 1]]) ? mi - 1 : mi;
+            alt.splice(nb, 2);
+          }
+        }
+      }
+      if (alt.length < r) break;
+      let same = true;
+      for (let i = 0; i < r; i++) if (alt[i] !== ext[i]) { same = false; break; }
+      if (same) { converged = true; break; }
+      ext = Int32Array.from(alt);
+    }
+    return { a: best ? best.a : a, iters: it, converged };
+  }
+
+  /* spec: {method:'remez'|'ls', halfband:bool, N, fp, fs, wt}; fp, fs in cycles/sample at the prototype rate */
+  function design(spec) {
+    let N = spec.N;
+    const fit = (nu, bands, exPi) => spec.method === 'ls' ? lsFit(nu, bands) : remezFit(nu, bands, exPi);
+    const h = new Float64Array(N);
+    let res;
+    if (spec.halfband) {
+      const q = (N - 3) / 4, c = (N - 1) / 2;
+      const nu = []; for (let k = 0; k <= q; k++) nu.push(2 * k + 1);
+      res = fit(nu, [{ w1: 0, w2: 2 * Math.PI * spec.fp, D: 0.5, W: 1 }], false);
+      if (!res.a) return null;
+      h[c] = 0.5;
+      for (let k = 0; k <= q; k++) { h[c - (2 * k + 1)] = res.a[k] / 2; h[c + (2 * k + 1)] = res.a[k] / 2; }
+    } else {
+      const bands = [{ w1: 0, w2: 2 * Math.PI * spec.fp, D: 1, W: 1 },
+                     { w1: 2 * Math.PI * spec.fs, w2: Math.PI, D: 0, W: spec.wt }];
+      if (N & 1) {
+        const n = (N - 1) / 2, nu = []; for (let k = 0; k <= n; k++) nu.push(k);
+        res = fit(nu, bands, false);
+        if (!res.a) return null;
+        h[n] = res.a[0];
+        for (let k = 1; k <= n; k++) { h[n - k] = res.a[k] / 2; h[n + k] = res.a[k] / 2; }
+      } else {
+        const n = N / 2, nu = []; for (let k = 0; k < n; k++) nu.push(k + 0.5);
+        res = fit(nu, bands, true);
+        if (!res.a) return null;
+        for (let k = 0; k < n; k++) { h[n - 1 - k] = res.a[k] / 2; h[n + k] = res.a[k] / 2; }
+      }
+    }
+    return { h, iters: res.iters, converged: res.converged };
+  }
+
+  // Complex response of taps at K+1 points f = k/(2K), k = 0..K (0 .. Nyquist). Returns {re, im}
+  function freqz(taps, K) {
+    const P = 2 * K, ct = new Float64Array(P), st = new Float64Array(P);
+    for (let i = 0; i < P; i++) { ct[i] = Math.cos(2 * Math.PI * i / P); st[i] = Math.sin(2 * Math.PI * i / P); }
+    const re = new Float64Array(K + 1), im = new Float64Array(K + 1), N = taps.length;
+    for (let k = 0; k <= K; k++) {
+      let sr = 0, si = 0, idx = 0;
+      for (let n = 0; n < N; n++) {
+        const t = taps[n];
+        if (t !== 0) { sr += t * ct[idx]; si -= t * st[idx]; }
+        idx += k; if (idx >= P) idx -= P;
+      }
+      re[k] = sr; im[k] = si;
+    }
+    return { re, im };
+  }
+
+  // Group delay (samples) of taps at K+1 points 0..Nyquist
+  function groupDelay(taps, K) {
+    const a = freqz(taps, K), nt = taps.map((t, n) => t * n), b = freqz(nt, K);
+    const gd = new Float64Array(K + 1);
+    for (let k = 0; k <= K; k++) {
+      const d = a.re[k] * a.re[k] + a.im[k] * a.im[k];
+      gd[k] = d > 1e-10 ? (b.re[k] * a.re[k] + b.im[k] * a.im[k]) / d : NaN;
+    }
+    return gd;
+  }
+
+  function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+  /* Exact steady-state spectra of a periodic test signal through  up-L -> h -> down-M.
+     Bin spacing is fs_in/P at every stage, so stages line up bin for bin.
+     Amplitudes are per-tone amplitudes; filter is used at unity DC gain (the gain of L is implied). */
+  function resample(h, L, M, sig) {
+    const Q = Math.max(Math.ceil(8192 / (L * M)), Math.ceil(512 / M)) + ((Math.max(Math.ceil(8192 / (L * M)), Math.ceil(512 / M)) * M) & 1);
+    const P = M * Q, PL = P * L, LQ = L * Q, half = P / 2;   // P even
+    const xr = new Float64Array(P), xi = new Float64Array(P);
+    const rnd = rng(12345);
+    const B = sig.bw * half;
+    const put = (k, amp) => { const ph = 2 * Math.PI * rnd(); xr[k] += amp * Math.cos(ph); xi[k] += amp * Math.sin(ph); };
+    const tone = (frac, dB) => { const k = Math.min(half - 1, Math.max(1, Math.round(frac * half))); put(k, Math.pow(10, dB / 20)); };
+    if (sig.type === 'band' || sig.type === 'interferer') {
+      for (let k = 1; k < half; k++) { const ph = rnd(); if (k <= B) { const amp = Math.pow(10, -30 * (k / B) / 20); xr[k] = amp * Math.cos(2 * Math.PI * ph); xi[k] = amp * Math.sin(2 * Math.PI * ph); } }
+      if (sig.type === 'interferer') tone(0.93, 0);
+    } else if (sig.type === 'noise') {
+      for (let k = 1; k < half; k++) { const ph = 2 * Math.PI * rnd(); xr[k] = Math.cos(ph); xi[k] = Math.sin(ph); }
+    } else {
+      [[0.12, 0], [0.37, -6], [0.63, -12], [0.94, -18]].forEach(([f, d]) => tone(f * sig.bw, d));
+    }
+    for (let k = 1; k < half; k++) { xr[P - k] = xr[k]; xi[P - k] = -xi[k]; }
+    const H = freqz(h, PL / 2);
+    const hr = k => H.re[k <= PL / 2 ? k : PL - k], hi = k => (k <= PL / 2 ? H.im[k] : -H.im[PL - k]);
+    const KU = PL / 2, KO = Math.floor(LQ / 2);
+    const fU = new Float64Array(KU + 1), up = new Float64Array(KU + 1), fl = new Float64Array(KU + 1), hm = new Float64Array(KU + 1);
+    const wr = new Float64Array(PL), wi = new Float64Array(PL);
+    for (let k = 0; k < PL; k++) {
+      const a = xr[k % P], b = xi[k % P], c = hr(k), d = hi(k);
+      wr[k] = a * c - b * d; wi[k] = a * d + b * c;
+    }
+    for (let k = 0; k <= KU; k++) {
+      fU[k] = k / P; up[k] = Math.hypot(xr[k % P], xi[k % P]); fl[k] = Math.hypot(wr[k], wi[k]); hm[k] = Math.hypot(H.re[k], H.im[k]);
+    }
+    const fO = new Float64Array(KO + 1), out = new Float64Array(KO + 1), err = new Float64Array(KO + 1), want = new Float64Array(KO + 1);
+    for (let k = 0; k <= KO; k++) {
+      let sr = 0, si = 0;
+      for (let i = 0; i < M; i++) { sr += wr[(k + i * LQ) % PL]; si += wi[(k + i * LQ) % PL]; }
+      let dr = 0, di = 0;
+      if (k < half) { dr = wr[k]; di = wi[k]; }
+      fO[k] = k / P; out[k] = Math.hypot(sr, si); want[k] = Math.hypot(dr, di); err[k] = Math.hypot(sr - dr, si - di);
+    }
+    const fI = fU.subarray(0, half + 1), inp = up.slice(0, half + 1);
+    return { P, half, fI, inp, fU, up, fl, hm, fO, out, err, want };
+  }
+
+  return { design, freqz, groupDelay, resample };
+})();
+if (typeof module !== 'undefined') module.exports = DSP;
+
+</script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const gcd = (a, b) => b ? gcd(b, a % b) : a;
+const fmt = (v, d = 3) => (+v.toFixed(d)).toString();
+const PLOTS = [];
+
+/* ---------- canvas plot ---------- */
+function niceStep(span, n) { const raw = span / n, p = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / p; return (f < 1.5 ? 1 : f < 3.5 ? 2 : f < 7.5 ? 5 : 10) * p; }
+class Plot {
+  constructor(id, h) {
+    this.host = $(id); this.host.classList.add('plot'); this.h = h; this.hx = null;
+    this.cv = document.createElement('canvas'); this.tip = document.createElement('div'); this.tip.className = 'tip';
+    this.host.append(this.cv, this.tip);
+    this.host.addEventListener('pointermove', e => { this.hx = e.clientX - this.cv.getBoundingClientRect().left; this.draw(); });
+    this.host.addEventListener('pointerleave', () => { this.hx = null; this.draw(); });
+    new ResizeObserver(() => this.draw()).observe(this.host);
+    PLOTS.push(this);
+  }
+  set(c) { this.c = c; this.draw(); }
+  draw() {
+    const c = this.c; if (!c) return;
+    const W = this.host.clientWidth, H = this.h, dpr = window.devicePixelRatio || 1;
+    if (W < 40) return;
+    const cv = this.cv; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.height = H + 'px';
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H);
+    const ml = 48, mr = 12, mt = 16, mb = 34, pw = W - ml - mr, ph = H - mt - mb;
+    const X = x => ml + (x - c.x0) / (c.x1 - c.x0) * pw, Y = y => mt + (c.y1 - y) / (c.y1 - c.y0) * ph;
+    const ink = css('--ink'), muted = css('--muted'), line = css('--line');
+    g.font = '11px ' + css('--mono'); g.lineWidth = 1;
+    for (const b of (c.bands || [])) { g.globalAlpha = b.alpha || 0.1; g.fillStyle = css(b.color); const a = Math.max(ml, X(b.x0)), e = Math.min(ml + pw, X(b.x1)); if (e > a) g.fillRect(a, mt, e - a, ph); g.globalAlpha = 1; }
+    // grid + ticks
+    const ys = c.yStep || niceStep(c.y1 - c.y0, 5), xs = c.xStep || niceStep(c.x1 - c.x0, Math.max(3, Math.min(10, pw / 70)));
+    g.strokeStyle = line; g.fillStyle = muted; g.textBaseline = 'middle'; g.textAlign = 'right';
+    for (let y = Math.ceil(c.y0 / ys - 1e-9) * ys; y <= c.y1 + 1e-9; y += ys) { const py = Math.round(Y(y)) + .5; g.beginPath(); g.moveTo(ml, py); g.lineTo(ml + pw, py); g.stroke(); g.fillText((c.yTick || (v => fmt(v, 4)))(y), ml - 6, py); }
+    g.textBaseline = 'top'; g.textAlign = 'center';
+    for (let x = Math.ceil(c.x0 / xs - 1e-9) * xs; x <= c.x1 + 1e-9; x += xs) { const px = Math.round(X(x)) + .5; g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.fillText(fmt(x, 4), px, mt + ph + 5); }
+    g.fillText(c.xLabel || '', ml + pw / 2, mt + ph + 19);
+    g.save(); g.translate(11, mt + ph / 2); g.rotate(-Math.PI / 2); g.fillText(c.yLabel || '', 0, -6); g.restore();
+    // series
+    g.save(); g.beginPath(); g.rect(ml, mt - 4, pw, ph + 5); g.clip();
+    for (const s of c.series) {
+      const col = css(s.color), n = s.x.length;
+      if (s.type === 'stem') {
+        const zy = Y(0), sp = pw / Math.max(1, c.x1 - c.x0), hiC = css(s.hiColor);
+        for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) {
+          const hi = s.hi && s.hi(i); if (hi !== !!pass) continue;
+          g.strokeStyle = g.fillStyle = hi ? hiC : col; g.lineWidth = hi ? 2 : 1.2; g.globalAlpha = hi ? 1 : .75;
+          const px = X(s.x[i]), py = Y(s.y[i]); g.beginPath(); g.moveTo(px, zy); g.lineTo(px, py); g.stroke();
+          if (sp > 5) { g.beginPath(); g.arc(px, py, hi ? 3 : 2, 0, 7); g.fill(); }
+        }
+        g.globalAlpha = 1; continue;
+      }
+      g.strokeStyle = col; g.lineWidth = s.width || 1.6; g.globalAlpha = s.alpha || 1; g.lineJoin = 'round'; g.beginPath();
+      const dense = n > 3 * pw; let pen = false, cpx = null, lo = 0, hiY = 0;
+      const lowY = c.y0 - (c.y1 - c.y0);
+      for (let i = 0; i < n; i++) {
+        let v = s.y[i]; if (Number.isNaN(v)) { pen = false; continue; }
+        if (v < lowY) v = lowY; if (v > c.y1 + (c.y1 - c.y0)) v = c.y1 + (c.y1 - c.y0);
+        const px = X(s.x[i]), py = Y(v);
+        if (!dense) { pen ? g.lineTo(px, py) : g.moveTo(px, py); pen = true; continue; }
+        const col_ = Math.floor(px);
+        if (col_ !== cpx) { if (cpx !== null) { g.lineTo(cpx + .5, lo); g.lineTo(cpx + .5, hiY); } else g.moveTo(px, py); cpx = col_; lo = hiY = py; }
+        else { if (py > lo) lo = py; if (py < hiY) hiY = py; }
+      }
+      if (dense && cpx !== null) { g.lineTo(cpx + .5, lo); g.lineTo(cpx + .5, hiY); }
+      g.stroke(); g.globalAlpha = 1;
+    }
+    g.restore();
+    // vertical markers
+    for (const v of (c.vlines || [])) {
+      if (v.x < c.x0 || v.x > c.x1) continue; const px = Math.round(X(v.x)) + .5;
+      g.strokeStyle = muted; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.setLineDash([]);
+      g.fillStyle = ink; g.textBaseline = 'bottom'; const right = px + 6 + g.measureText(v.label).width < ml + pw;
+      g.textAlign = right ? 'left' : 'right'; g.fillText(v.label, px + (right ? 4 : -4), mt - 2);
+    }
+    g.strokeStyle = muted; g.strokeRect(ml + .5, mt + .5, pw, ph);
+    // hover
+    const tip = this.tip;
+    if (this.hx === null || this.hx < ml || this.hx > ml + pw) { tip.style.display = 'none'; return; }
+    let xd = c.x0 + (this.hx - ml) / pw * (c.x1 - c.x0), rows = '', snapX = null;
+    for (const s of c.series) {
+      if (!s.name) continue; const n = s.x.length; if (!n || xd < s.x[0] - 1e-9 || xd > s.x[n - 1] + 1e-9) continue;
+      let a = 0, b = n - 1; while (b - a > 1) { const m = (a + b) >> 1; if (s.x[m] < xd) a = m; else b = m; }
+      const i = (xd - s.x[a] < s.x[b] - xd) ? a : b; if (s.type === 'stem') snapX = s.x[i];
+      const v = (s.raw || s.y)[i];
+      rows += `<div><i style="background:${css(s.type === 'stem' && s.hi && s.hi(i) ? s.hiColor : s.color)}"></i>${typeof s.name === 'function' ? s.name(i) : s.name}: ${Number.isFinite(v) ? (c.yFmt || (u => fmt(u, 2)))(v) : '–'}</div>`;
+    }
+    if (snapX !== null) xd = snapX;
+    const px = Math.round(X(xd)) + .5; g.strokeStyle = ink; g.globalAlpha = .5; g.beginPath(); g.moveTo(px, mt); g.lineTo(px, mt + ph); g.stroke(); g.globalAlpha = 1;
+    tip.innerHTML = `<div style="color:var(--muted)">${(c.xFmt || (u => fmt(u, 4)))(xd)}</div>` + rows; tip.style.display = 'block';
+    const tw = tip.offsetWidth; tip.style.left = (this.hx + 14 + tw > W ? this.hx - 14 - tw : this.hx + 14) + 'px';
+  }
+}
+
+/* ---------- state ---------- */
+const S = { L: 3, M: 2, method: 'remez', N: 48, form: 'L', formAuto: true, m: 0, timer: null, h: null, last: null };
+const P = { mag: new Plot('pMag', 250), imp: new Plot('pImp', 250), legMag: new Plot('pLegMag', 200), legGd: new Plot('pLegGd', 200),
+  in: new Plot('pIn', 170), up: new Plot('pUp', 190), filt: new Plot('pFilt', 190), out: new Plot('pOut', 190) };
+const dB = (v, ref, floor) => { const d = 20 * Math.log10(v / ref); return d > floor - 40 ? d : floor - 40; };
+const dbTick = v => fmt(v, 0);
+
+function spec() {
+  const mx = Math.max(S.L, S.M), ap = +$('inAp').value, as = +$('inAs').value, hb = S.method === 'hb';
+  let N = S.N, fp, fs;
+  if (hb) { N = 4 * Math.max(0, Math.round((N - 3) / 4)) + 3; fp = Math.min(ap, 0.98) * 0.25; fs = 0.5 - fp; }
+  else { const fc = 0.5 / mx; fs = Math.min(as * fc, 0.497); fp = Math.min(ap * fc, fs - 0.003); }
+  return { method: hb ? $('hbOpt').value : S.method, halfband: hb, N, fp, fs, wt: Math.pow(10, +$('inWt').value), fc: hb ? 0.25 : 0.5 / mx };
+}
+const legCount = () => S.form === 'L' ? S.L : S.M;
+const activeResidue = () => (S.m * S.M) % S.L;          // taps i with i mod L == this meet a real sample
+function minM() { const R = legCount(), K = Math.ceil(S.N / R); return S.form === 'L' ? Math.ceil((K - 1) * S.L / S.M) : K; }
+
+/* ---------- full recompute ---------- */
+function update(resetM) {
+  const sp = spec(); S.N = sp.N; $('inN').value = sp.N;
+  const d = DSP.design(sp);
+  const note = $('filtNote'); let msg = '';
+  if (!d) msg = 'This design did not solve. Widen the transition band or change N.';
+  else { S.h = d.h; S.sp = sp; if (!d.converged) msg = 'The exchange algorithm did not fully converge. Treat the ripple figures as approximate.'; }
+  const mx = Math.max(S.L, S.M);
+  if (sp.halfband && mx !== 2) msg += (msg ? ' ' : '') + `A half-band filter cuts off at a quarter of its own sample rate, which suits L or M = 2. Here the cutoff belongs at 1/${2 * mx} of the prototype rate, so images or aliases will get through. That is visible in the spectra.`;
+  if (!sp.halfband && mx === 1) msg += (msg ? ' ' : '') + 'With L = M = 1 no filter is needed. Raise L or M.';
+  note.hidden = !msg; note.textContent = msg;
+  if (resetM) S.m = minM();
+  labels(sp); drawFilter(); drawStructure(); drawLegs(); drawSpectra();
+}
+
+function labels(sp) {
+  const { L, M } = S, g = gcd(L, M), mx = Math.max(L, M);
+  $('chain').innerHTML = `x[n] → <b>↑${L}</b> → <b>H(z)</b>, ${sp.N} taps → <b>↓${M}</b> → y[m]`;
+  $('ratio').innerHTML = `f<sub>out</sub> = ${L}/${M} · f<sub>in</sub> = ${fmt(L / M, 4)} f<sub>in</sub>` +
+    `<small>Prototype runs at ${L}·f<sub>in</sub>. Ideal cutoff is f<sub>c</sub> = ${fmt(0.5 * Math.min(1, L / M), 4)} f<sub>in</sub>, the lower of the two Nyquist rates.` +
+    (g > 1 ? ` ${L}/${M} reduces to ${L / g}/${M / g}, which needs fewer legs.` : '') + `</small>`;
+  $('oN').textContent = `${sp.N} (${Math.ceil(sp.N / L)} per leg of ${L})`;
+  const hb = sp.halfband;
+  $('oAp').textContent = `${fmt(+$('inAp').value, 2)} × fc`;
+  $('oAs').textContent = hb ? `${fmt(2 - Math.min(+$('inAp').value, .98), 2)} × fc (mirror)` : `${fmt(+$('inAs').value, 2)} × fc`;
+  $('inAs').disabled = hb; $('inWt').disabled = hb;
+  $('oWt').textContent = hb ? 'fixed by symmetry' : `× ${fmt(sp.wt, sp.wt < 1 ? 3 : 1)}`;
+  $('hbField').hidden = !hb;
+  $('oBw').textContent = `${Math.round(+$('inBw').value * 100)}% of input Nyquist`;
+  $('inBw').disabled = $('sigType').value === 'noise';
+}
+
+function drawFilter() {
+  const h = S.h, sp = S.sp, N = h.length, L = S.L, floor = +$('dbFloor').value;
+  const K = Math.max(2048, 8 * N), H = DSP.freqz(h, K), f = new Float64Array(K + 1), mag = new Float64Array(K + 1), raw = new Float64Array(K + 1);
+  const dc = Math.hypot(H.re[0], H.im[0]);
+  let pmin = Infinity, pmax = -Infinity, smax = -Infinity;
+  for (let k = 0; k <= K; k++) {
+    const fr = k / (2 * K), a = Math.hypot(H.re[k], H.im[k]) / dc, d = 20 * Math.log10(a);
+    f[k] = fr * L; raw[k] = d; mag[k] = Math.max(d, floor - 40);
+    if (fr <= sp.fp + 1e-12) { pmin = Math.min(pmin, d); pmax = Math.max(pmax, d); }
+    if (fr >= sp.fs - 1e-12) smax = Math.max(smax, d);
+  }
+  P.mag.set({ x0: 0, x1: L / 2, y0: floor, y1: 10, yStep: 20, yTick: dbTick, xLabel: 'frequency ( × f_in )', yLabel: 'dB',
+    xFmt: v => `f = ${fmt(v, 4)} f_in`, yFmt: v => fmt(v, 2) + ' dB',
+    bands: [{ x0: 0, x1: sp.fp * L, color: '--s1', alpha: .1 }, { x0: sp.fs * L, x1: L / 2, color: '--muted', alpha: .1 }],
+    vlines: [{ x: sp.fc * L, label: 'fc' }],
+    series: [{ x: f, y: mag, raw, color: '--s1', name: '|H|', width: 1.8 }] });
+  const n = Float64Array.from(h, (_, i) => i), res = activeResidue();
+  let hm = 0; for (const v of h) hm = Math.max(hm, Math.abs(v));
+  let hmin = 0; for (const v of h) hmin = Math.min(hmin, v);
+  P.imp.set({ x0: -1, x1: N, y0: Math.min(-0.05 * hm, hmin * 1.15), y1: hm * 1.1, xLabel: 'tap index i', yLabel: 'h[i]',
+    xFmt: v => `i = ${v}, leg ${v % L} of ${L}`, yFmt: v => v.toPrecision(5),
+    series: [{ type: 'stem', x: n, y: h, color: '--muted', hiColor: '--s1', hi: i => i % L === res, name: i => `h[${i}]` }] });
+  $('impKey').textContent = L > 1 ? `taps of leg ${res} (i mod ${L} = ${res})` : 'all taps (one leg)';
+  const zeros = Array.from(h).filter(v => Math.abs(v) < 1e-12).length;
+  const st = [['Taps', N + (zeros ? ` (${zeros} zero)` : '')], ['Taps per leg', `${Math.ceil(N / S.L)} × ${S.L} legs`],
+    ['Passband ripple', fmt(pmax - pmin, 4) + ' dB p-p'], ['Stopband rejection', fmt(-smax, 1) + ' dB'],
+    ['Transition band', `${fmt(sp.fp * L, 4)} to ${fmt(sp.fs * L, 4)} f_in`]];
+  $('stats').innerHTML = st.map(([a, b]) => `<div class="stat"><span>${a}</span><b>${b}</b></div>`).join('');
+  $('coefs').textContent = Array.from(h, v => (v >= 0 ? ' ' : '') + v.toExponential(12)).join('\n');
+}
+
+/* ---------- structure diagram ---------- */
+function drawStructure() {
+  const { L, M, m } = S, h = S.h, N = h.length, isL = S.form === 'L', R = isL ? L : M, K = Math.ceil(N / R);
+  const cw = 62, rh = 74, gl = isL ? 136 : 150, top = 26, bw = 50, bh = 24;
+  const xr = gl + K * cw + 16, Wd = xr + (isL ? 190 : 170), Hd = top + R * rh + 8, ymid = top + (R - 1) * rh / 2 + bh / 2;
+  const p = (m * M) % L, n = Math.floor(m * M / L), nPrev = Math.floor((m - 1) * M / L);
+  const o = [];
+  const T = (x, y, s, cls = '', anchor = 'middle') => o.push(`<text x="${x}" y="${y}" text-anchor="${anchor}" class="${cls}">${s}</text>`);
+  for (let r = 0; r < R; r++) {
+    const y = top + r * rh, by = y + bh / 2, sy = y + 52, act = isL ? r === p : true;
+    o.push(`<g class="${act ? 'act' : 'dim'}">`);
+    T(gl - (isL ? 54 : 40), by - 7, `leg ${r}`, 'lbl' + (act && isL ? ' acc' : ''), 'start');
+    o.push(`<path class="wire" d="M${gl - (isL ? 60 : 44)} ${by}H${gl + (K - 1) * cw + bw + 0}"/>`);
+    o.push(`<path class="wire" d="M${gl + bw / 2} ${sy}H${xr}"/>`);
+    for (let j = 0; j < K; j++) {
+      const i = r + j * R, x = gl + j * cw;
+      let lab, isNew = false, zero = false;
+      if (isL) { lab = `x[${n - j}]`; isNew = (n - j) > nPrev; }
+      else { const vi = (m - j) * M - r; if (vi % L === 0) { lab = `x[${vi / L}]`; isNew = vi > (m - 1) * M; } else { lab = '0'; zero = true; } }
+      const has = i < N, hz = has && Math.abs(h[i]) < 1e-12;
+      o.push(`<g class="${zero || !has ? 'zero' : ''}"><title>${has ? `storage ${j} of leg ${r}: holds ${lab}, weighted by h[${i}] = ${h[i].toPrecision(6)}` : 'no tap here: N is not a multiple of the leg count'}</title>`);
+      o.push(`<rect class="reg${isNew ? ' new' : ''}" x="${x}" y="${y}" width="${bw}" height="${bh}" rx="3"/>`);
+      T(x + bw / 2, by + 4, lab);
+      if (has) { o.push(`<path class="wire" d="M${x + bw / 2} ${y + bh}V${sy}" ${hz ? 'stroke-dasharray="2 3"' : ''}/>`); T(x + bw / 2 + 4, y + bh + 17, hz ? `h[${i}]=0` : `h[${i}]`, 'mut', 'start'); }
+      o.push('</g>');
+    }
+    o.push(`<circle class="node" cx="${xr + 11}" cy="${sy}" r="11"/>`); T(xr + 11, sy + 4, 'Σ');
+    o.push('</g>');
+    if (isL) { o.push(`<path class="wire" d="M${xr + 22} ${sy}H${xr + 56}"/><circle class="dot" cx="${xr + 58}" cy="${sy}" r="3"/>`); }
+    else { o.push(`<path class="wire" d="M${xr + 22} ${sy}H${xr + 60}"/>`); o.push(`<circle class="dot" cx="${gl - 46}" cy="${by}" r="3"/>`); }
+  }
+  if (isL) {
+    const bx = gl - 60; o.push(`<path class="wire" d="M${bx} ${top + bh / 2}V${top + (R - 1) * rh + bh / 2}"/><path class="wire" d="M10 ${top + bh / 2}H${bx}"/>`);
+    T(10, top + bh / 2 - 8, 'x[n]', 'lbl', 'start');
+    const px = xr + 130, py = ymid + 40, ay = top + p * rh + 52;
+    o.push(`<line class="arm" x1="${px}" y1="${py}" x2="${xr + 58}" y2="${ay}"/><circle class="node" cx="${px}" cy="${py}" r="4"/><path class="wire" d="M${px + 4} ${py}H${px + 34}"/>`);
+    T(px + 38, py + 4, `y[${m}]`, 'lbl', 'start');
+    T(px + 2, py + 22, `+${M} leg${M > 1 ? 's' : ''} per output`, 'mut');
+  } else {
+    const px = 22, py = ymid;
+    o.push(`<line class="arm" x1="${px}" y1="${py}" x2="${gl - 46}" y2="${top + bh / 2}"/><circle class="node" cx="${px}" cy="${py}" r="4"/>`);
+    T(8, py + 20, L > 1 ? 'v[i]' : 'x[n]', 'lbl', 'start'); T(8, py + 36, `leg ${R - 1} → 0`, 'mut', 'start'); T(8, py + 50, 'per output', 'mut', 'start');
+    const sx = xr + 60, y0 = top + 52, y1 = top + (R - 1) * rh + 52, yc = (y0 + y1) / 2;
+    o.push(`<path class="wire" d="M${sx} ${y0}V${y1}"/><path class="wire" d="M${sx} ${yc}H${sx + 22}"/><circle class="node" cx="${sx + 33}" cy="${yc}" r="11"/><path class="wire" d="M${sx + 44} ${yc}H${sx + 62}"/>`);
+    T(sx + 33, yc + 4, 'Σ'); T(sx + 64, yc + 4, `y[${m}]`, 'lbl', 'start');
+  }
+  const svg = $('diag'); svg.setAttribute('width', Wd); svg.setAttribute('height', Hd); svg.setAttribute('viewBox', `0 0 ${Wd} ${Hd}`); svg.innerHTML = o.join('');
+  // status
+  const st = $('status'), sc = $('sched');
+  if (isL) {
+    const k = n - nPrev;
+    st.innerHTML = `<em>y[${m}]</em> uses leg p = (m·M) mod L = (${m}·${M}) mod ${L} = <em>${p}</em>. Newest input is x[n], n = ⌊m·M/L⌋ = <em>${n}</em>. ` +
+      `${k === 0 ? 'No new input' : k + ' new input' + (k > 1 ? 's' : '')} since y[${m - 1}].<br>y[m] = L · Σ<sub>j</sub> h[p + j·L] · x[n − j], j = 0…${K - 1}. All ${L} legs share one ${K}-sample delay line; only the coefficient set changes.`;
+    const base = m - (m % L); let s = '';
+    for (let i = 0; i < L; i++) s += `<span class="${base + i === m ? 'on' : ''}">y[${base + i}]: leg ${((base + i) * M) % L}</span>`;
+    sc.innerHTML = L > 1 ? s : ''; sc.hidden = L === 1;
+  } else {
+    st.innerHTML = `<em>y[${m}]</em> sums all ${M} legs. Since y[${m - 1}] the commutator has delivered ${M} sample${M > 1 ? 's' : ''}, ${L > 1 ? 'v' : 'x'}[${(m - 1) * M + 1}…${m * M}], one to each leg from leg ${M - 1} up to leg 0.<br>` +
+      `y[m] = Σ<sub>k</sub> Σ<sub>j</sub> h[k + j·M] · ${L > 1 ? 'v' : 'x'}[(m − j)·M − k].` +
+      (L > 1 ? ` Here v is the zero-stuffed input: v[i] = x[i/${L}] when ${L} divides i, otherwise 0. Only taps with i mod ${L} = <em>${p}</em> meet a real sample, which is leg ${p} of the L-leg form.` : '');
+    sc.innerHTML = ''; sc.hidden = true;
+  }
+  $('btnPrev').disabled = m <= 0;
+}
+
+function drawLegs() {
+  const h = S.h, N = h.length, isL = S.form === 'L', R = isL ? S.L : S.M, K = 160, floor = Math.max(-80, +$('dbFloor').value);
+  const hiLeg = isL ? activeResidue() : 0;
+  const f = Float64Array.from({ length: K + 1 }, (_, k) => k / (2 * K)), mags = [], gds = [];
+  for (let r = 0; r < R; r++) {
+    const taps = []; for (let i = r; i < N; i += R) taps.push(h[i] * R);
+    const H = DSP.freqz(taps, K), gd = DSP.groupDelay(taps, K), mg = new Float64Array(K + 1);
+    for (let k = 0; k <= K; k++) mg[k] = Math.max(floor - 20, 20 * Math.log10(Math.hypot(H.re[k], H.im[k]) + 1e-300));
+    mags.push(mg); gds.push(gd);
+  }
+  const order = [...Array(R).keys()].filter(r => r !== hiLeg).concat(hiLeg);
+  const mk = arr => order.map(r => ({ x: f, y: arr[r], color: r === hiLeg ? '--s1' : '--muted', width: r === hiLeg ? 2 : 1, alpha: r === hiLeg ? 1 : .55, name: (r === hiLeg || R <= 4) ? `leg ${r}` : null }));
+  const rate = isL ? 'f_in' : 'f_out';
+  P.legMag.set({ x0: 0, x1: .5, y0: Math.max(floor, -60), y1: 10, yStep: 10, yTick: dbTick, xLabel: `frequency ( × ${rate}, the leg rate )`, yLabel: 'dB', xFmt: v => `f = ${fmt(v, 3)} ${rate}`, yFmt: v => fmt(v, 2) + ' dB', series: mk(mags) });
+  const c = (N - 1) / 2 / R;
+  P.legGd.set({ x0: 0, x1: .5, y0: c - (R - 1) / R - .2, y1: c + .2, xLabel: `frequency ( × ${rate} )`, yLabel: 'samples', xFmt: v => `f = ${fmt(v, 3)} ${rate}`, yFmt: v => fmt(v, 3) + ' samples', series: mk(gds) });
+  document.querySelectorAll('.legKey').forEach(e => e.textContent = `leg ${hiLeg}`);
+}
+
+function drawSpectra() {
+  const { L, M } = S, floor = +$('dbFloor').value;
+  const r = DSP.resample(S.h, L, M, { type: $('sigType').value, bw: +$('inBw').value });
+  let ref = 0; for (const v of r.inp) ref = Math.max(ref, v);
+  const D = a => Float64Array.from(a, v => dB(v, ref, floor));
+  const base = { y0: floor, y1: 10, yStep: floor <= -160 ? 40 : 20, yTick: dbTick, yLabel: 'dB', xLabel: 'frequency ( × f_in )', xFmt: v => `f = ${fmt(v, 4)} f_in`, yFmt: v => v <= floor - 39 ? '< ' + (floor - 40) + ' dB' : fmt(v, 1) + ' dB' };
+  const hf = r.half, nyqO = L / (2 * M), up = D(r.up), fl = D(r.fl);
+  const split = (y, n1, n2) => [{ x: r.fU.subarray(0, hf + 1), y: y.subarray(0, hf + 1), color: '--s1', name: n1 }].concat(L > 1 ? [{ x: r.fU.subarray(hf), y: y.subarray(hf), color: '--s2', name: n2 }] : []);
+  const fold = M > 1 ? [{ x: nyqO, label: 'f_out/2: content above folds down' }] : [];
+  $('t1').textContent = `1. Input x[n], rate f_in`;
+  $('t2').textContent = `2. After ↑${L}, rate ${L}·f_in` + (L === 1 ? ' (unchanged, L = 1)' : '');
+  $('t3').textContent = `3. After H(z), rate ${L}·f_in`;
+  $('t4').textContent = `4. Output y[m] after ↓${M}, rate ${fmt(L / M, 4)}·f_in` + (M === 1 ? ' (unchanged, M = 1)' : '');
+  P.in.set({ ...base, x0: 0, x1: .5, series: [{ x: r.fI, y: D(r.inp), color: '--s1', name: 'input' }] });
+  P.up.set({ ...base, x0: 0, x1: L / 2, vlines: fold, series: split(up, 'baseband', 'images').concat([{ x: r.fU, y: D(Float64Array.from(r.hm, v => v * ref)), color: '--s3', name: 'filter |H|', width: 1.6 }]) });
+  P.filt.set({ ...base, x0: 0, x1: L / 2, vlines: fold, series: split(fl, 'baseband', 'residual images') });
+  P.out.set({ ...base, x0: 0, x1: nyqO, series: [{ x: r.fO, y: D(r.err), color: '--s2', name: 'images + aliases' }, { x: r.fO, y: D(r.out), color: '--s1', name: 'output' }] });
+}
+
+/* ---------- controls ---------- */
+function stepM(d) { S.m = Math.max(0, S.m + d); drawStructure(); drawFilter(); drawLegs(); }
+function setRates(L, M) {
+  L = Math.min(32, Math.max(1, Math.round(L) || 1)); M = Math.min(32, Math.max(1, Math.round(M) || 1));
+  const oldMx = Math.max(S.L, S.M), mx = Math.max(L, M);
+  if ($('scaleN').checked && mx !== oldMx) S.N = Math.min(513, Math.max(3, Math.round(S.N * mx / oldMx)));
+  S.L = L; S.M = M; $('inL').value = L; $('inM').value = M;
+  if (S.formAuto) setForm(L > 1 ? 'L' : 'M', true);
+  update(true);
+}
+function setForm(v, auto) { S.form = v; if (!auto) S.formAuto = false; document.querySelectorAll('#segForm button').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === v)); }
+let raf = 0; const soon = reset => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => update(reset)); };
+$('inL').addEventListener('change', () => setRates(+$('inL').value, S.M));
+$('inM').addEventListener('change', () => setRates(S.L, +$('inM').value));
+document.querySelectorAll('[data-step]').forEach(b => b.addEventListener('click', () => { const L = S.L + (b.dataset.step === 'inL' ? +b.dataset.d : 0), M = S.M + (b.dataset.step === 'inM' ? +b.dataset.d : 0); setRates(L, M); }));
+document.querySelectorAll('#segMethod button').forEach(b => b.addEventListener('click', () => { S.method = b.dataset.v; document.querySelectorAll('#segMethod button').forEach(x => x.setAttribute('aria-pressed', x === b)); update(true); }));
+document.querySelectorAll('#segForm button').forEach(b => b.addEventListener('click', () => { setForm(b.dataset.v); update(true); }));
+$('inN').addEventListener('input', () => { S.N = +$('inN').value; soon(true); });
+['inAp', 'inAs', 'inWt', 'inBw'].forEach(id => $(id).addEventListener('input', () => {
+  if (id === 'inAp' && +$('inAs').value < +$('inAp').value + .02) $('inAs').value = +$('inAp').value + .02;
+  if (id === 'inAs' && +$('inAp').value > +$('inAs').value - .02) $('inAp').value = +$('inAs').value - .02;
+  soon(false); }));
+['hbOpt', 'sigType', 'dbFloor'].forEach(id => $(id).addEventListener('change', () => update(false)));
+$('btnPrev').addEventListener('click', () => stepM(-1));
+$('btnNext').addEventListener('click', () => stepM(1));
+$('btnPlay').addEventListener('click', () => {
+  if (S.timer) { clearInterval(S.timer); S.timer = null; $('btnPlay').textContent = 'Play'; }
+  else { S.timer = setInterval(() => stepM(1), 900); $('btnPlay').textContent = 'Pause'; }
+});
+$('copyBtn').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('coefs').textContent); $('copyMsg').textContent = 'Copied.'; }
+  catch (e) { $('copyMsg').textContent = 'Copy was blocked. Select the text below instead.'; }
+});
+const redraw = () => PLOTS.forEach(p => p.draw());
+new MutationObserver(redraw).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(redraw);
+update(true);
+})();
+</script>
+</body>
+</html>

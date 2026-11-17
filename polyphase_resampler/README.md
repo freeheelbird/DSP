@@ -5,11 +5,12 @@ A rational resampler, `x[n] -> up L -> H(z) -> down M -> y[m]`, taken from explo
 | Part | Files | Purpose |
 |---|---|---|
 | Lab | `polyphase_lab.py`, `polyphase_lab.ipynb` | Design the prototype filter, see what sits in every storage unit of every leg, and view the spectra at each stage. |
+| Web app | [`web/index.html`](web) | The same lab as a single page that runs in a browser. |
 | RTL | [`rtl/polyphase_resampler.sv`](rtl) | Synthesizable SystemVerilog implementation of the L-leg structure. |
 | Model | [`rtl/resampler_model.py`](rtl) | Floating-point reference with an optional fixed-point mode that matches the RTL bit for bit. |
 | Verification | [`rtl/verify_rtl.py`](rtl) | Simulates the RTL in Verilator and compares its output with the fixed-point model. |
 
-The RTL, model and verification flow are documented in [`rtl/README.md`](rtl/README.md).
+The RTL, model and verification flow are documented in [`rtl/README.md`](rtl/README.md). The web app is described in [`web/README.md`](web/README.md).
 
 ## Lab
 
